@@ -313,7 +313,17 @@ class MCPBLE:
 
     def send(self, payload):
         """Push one JSON object to the host as one `\\n`-terminated
-        line, chunked at 20 bytes. Returns False if no link."""
+        line, chunked at 20 bytes. Returns False if no link.
+
+        Pace the chunks with an inter-chunk sleep. ESP32 NimBLE's
+        notification queue is shallow — bursting gatts_notify back-to-
+        back faster than the radio can transmit causes the controller
+        to silently drop the later chunks (observed on Windows: 2–3
+        chunks land, the rest vanish, the host RPC times out). 40 ms
+        covers the typical Windows-negotiated connection interval
+        (~30 ms) with margin; a 3-chunk ack ends up under ~120 ms
+        end-to-end which is well inside any RPC timeout.
+        """
         if self._conn is None:
             return False
         try:
@@ -322,7 +332,11 @@ class MCPBLE:
             print("mcp_ble: send encode failed:", e)
             return False
         try:
+            first = True
             for i in range(0, len(data), _MTU):
+                if not first:
+                    time.sleep_ms(40)
+                first = False
                 self._ble.gatts_notify(self._conn, self._tx_h, data[i : i + _MTU])
         except OSError as e:
             print("mcp_ble: notify failed:", e)

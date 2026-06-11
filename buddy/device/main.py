@@ -227,6 +227,12 @@ def _wifi_pip_label():
     return ("ONLINE", _GREEN)
 
 
+# Single-shot guard for battery-read error logging: the read runs in
+# the 30 s refresh loop, so a persistently broken driver would spam
+# the console without it. Cleared on the next successful read.
+_bat_err_logged = False
+
+
 def _battery_label():
     """Header-strip text + color for the battery, or ``(None, None)``
     when the Power driver can't be read — callers skip drawing rather
@@ -234,10 +240,15 @@ def _battery_label():
     code in the apps: a flaky driver must never take down the
     launcher.
     """
+    global _bat_err_logged
     try:
         lvl = M5.Power.getBatteryLevel()
-    except Exception:
+    except Exception as e:
+        if not _bat_err_logged:
+            print("launcher: battery read failed:", e)
+            _bat_err_logged = True
         return (None, None)
+    _bat_err_logged = False
     if not isinstance(lvl, (int, float)) or not 0 <= lvl <= 100:
         return (None, None)
     lvl = int(lvl)

@@ -395,8 +395,48 @@ def _is_download_port(p) -> bool:
     return (p.product or "").strip() == _ROM_BOOTLOADER_PRODUCT
 
 
+def _download_mode_steps(variant: str) -> str:
+    """Device-specific instructions for entering ROM download mode.
+
+    ESP32-S3 native USB has no software path into download mode — GPIO0 must
+    be held low across a reset — but *how* you trigger that reset differs by
+    board:
+
+      * Cardputer-Adv has NO reset button; the "reset" is the side POWER
+        SWITCH. Hold BtnG0 (small button on the BACK) while switching the
+        power OFF then ON.
+      * Other native-USB boards (CoreS3, original Cardputer) have a physical
+        reset button (BtnRST); hold BtnG0 while tapping it.
+
+    Detection downstream is method-agnostic (it watches the USB bus for the
+    port to drop and the ROM bootloader to appear), so only this wording is
+    board-specific. Single source of truth — SKILL.md mirrors these steps.
+    """
+    if variant == "cardputer-adv":
+        return (
+            "  The Cardputer-Adv has NO reset button. Download mode is entered\n"
+            "  with the side POWER SWITCH plus BtnG0 (the small button on the\n"
+            "  BACK of the device; it's flush-mounted, a fingernail helps).\n"
+            "  1. Slide the side power switch to OFF.\n"
+            "  2. Press and HOLD BtnG0 (back of device).\n"
+            "  3. While still holding BtnG0, slide the power switch back to ON.\n"
+            "  4. Release BtnG0. Screen should be fully dark = download mode.\n"
+        )
+    return (
+        "  ESP32-S3 native USB needs GPIO0 held low across a reset (no software\n"
+        "  path exists). Button layout varies by board — check M5's docs if the\n"
+        "  names below don't match your unit:\n"
+        "  1. Press and HOLD BtnG0 (GPIO0 strap).\n"
+        "  2. While still holding BtnG0, trigger a reset (tap BtnRST; on boards\n"
+        "     with no reset button, slide the side power OFF then ON).\n"
+        "  3. Release the reset first, then keep holding BtnG0 ~1 more second.\n"
+        "  4. Release BtnG0. Screen should be fully dark = download mode.\n"
+    )
+
+
 def _wait_for_download_port(
     current_port: str,
+    variant: str = "cardputer-adv",
     per_attempt_timeout: float = 30.0,
     max_attempts: int = 10,
 ) -> str | None:
@@ -452,21 +492,15 @@ def _wait_for_download_port(
     if existing_dl:
         sys.stderr.write(
             "\nUSB lists ROM bootloader, but esptool could not open a session "
-            "(stale link?). Using the normal download-mode steps — if prompted, "
-            "try BtnRST once without BtnG0, then the G0+RST dance.\n"
+            "(stale link?). Falling through to the normal download-mode steps "
+            "below.\n"
         )
 
     for attempt in range(1, max_attempts + 1):
         if attempt == 1:
             sys.stderr.write(
                 "\n---- Enter download mode ----\n"
-                "  The Cardputer-Adv has two small buttons on the BACK of the\n"
-                "  device: BtnG0 (GPIO0 strap) and BtnRST (reset). Both are\n"
-                "  flush-mounted; you may need a fingernail to press them cleanly.\n"
-                "  1. Press and HOLD BtnG0.\n"
-                "  2. While still holding BtnG0, briefly press BtnRST.\n"
-                "  3. Release BtnRST first, then keep holding BtnG0 for ~1 more second.\n"
-                "  4. Release BtnG0. Screen should be fully dark.\n"
+                + _download_mode_steps(variant)
             )
         else:
             sys.stderr.write(f"\n---- Attempt {attempt}/{max_attempts} ----\n")
@@ -490,9 +524,16 @@ def _wait_for_download_port(
             time.sleep(0.1)
 
         if current_port in _espressif_ports():
-            sys.stderr.write(
-                "  No reset detected. Press BtnRST (back of device) while holding BtnG0.\n"
-            )
+            if variant == "cardputer-adv":
+                sys.stderr.write(
+                    "  No power-cycle detected. With BtnG0 (back) held down, slide\n"
+                    "  the side power switch OFF then back ON.\n"
+                )
+            else:
+                sys.stderr.write(
+                    "  No reset detected. Trigger a reset while holding BtnG0\n"
+                    "  (tap BtnRST, or power-cycle if the board has no reset button).\n"
+                )
             continue
 
         sys.stderr.write(f"  [port dropped] now: {_describe()}\n")
@@ -520,18 +561,33 @@ def _wait_for_download_port(
             # Shouldn't reach here — phase 2 would have returned above.
             return _dl_port()
         if "M5Stack UiFlow" in final_state or "0x8120" in final_state:
-            sys.stderr.write(
-                "  Device rebooted into UIFlow instead of download mode.\n"
-                "  This means BtnG0 was not held low when BtnRST was released.\n"
-                "  Hold BtnG0 MORE firmly (both buttons are on the back, small\n"
-                "  and flush — use a fingernail), and keep holding it for a full\n"
-                "  second AFTER you let go of BtnRST. Try again.\n"
-            )
+            if variant == "cardputer-adv":
+                sys.stderr.write(
+                    "  Device rebooted into UIFlow instead of download mode.\n"
+                    "  BtnG0 was not held low when power came back on.\n"
+                    "  Hold BtnG0 (back of device, small and flush — use a\n"
+                    "  fingernail) MORE firmly, and keep holding it for a full\n"
+                    "  second AFTER you slide the power switch to ON. Try again.\n"
+                )
+            else:
+                sys.stderr.write(
+                    "  Device rebooted into UIFlow instead of download mode.\n"
+                    "  BtnG0 was not held low when the reset released.\n"
+                    "  Hold BtnG0 MORE firmly and keep holding it for a full\n"
+                    "  second AFTER the reset. Try again.\n"
+                )
         else:
-            sys.stderr.write(
-                "  Device did not re-enumerate. It may be stuck — press BtnRST\n"
-                "  alone (without BtnG0) on the back to recover, then we'll try again.\n"
-            )
+            if variant == "cardputer-adv":
+                sys.stderr.write(
+                    "  Device did not re-enumerate. It may be stuck — slide the\n"
+                    "  side power switch OFF then ON (without BtnG0) to recover,\n"
+                    "  then we'll try again.\n"
+                )
+            else:
+                sys.stderr.write(
+                    "  Device did not re-enumerate. It may be stuck — press BtnRST\n"
+                    "  alone (without BtnG0) to recover, then we'll try again.\n"
+                )
             # Wait for device to come back before the next attempt.
             recovery_deadline = time.time() + 30.0
             while time.time() < recovery_deadline:
@@ -1038,13 +1094,10 @@ def main() -> int:
     if native and not args.skip_flash:
         sys.stderr.write(
             "\n---- Heads up: button dance needed during FLASH ----\n"
-            "  This Cardputer-Adv uses native USB; there is no software path\n"
-            "  into download mode. When the FLASH stage begins you'll need to:\n"
-            "    1. Press and HOLD BtnG0 (back of device).\n"
-            "    2. Briefly press BtnRST (also on the back).\n"
-            "    3. Release BtnRST first; keep holding BtnG0 ~1 more second.\n"
-            "    4. Release BtnG0. Screen should be fully dark.\n"
-            "  Watch for the 'Enter download mode' prompt.\n"
+            "  This board uses native USB; there is no software path into\n"
+            "  download mode. When the FLASH stage begins you'll need to:\n"
+            + _download_mode_steps(args.variant)
+            + "  Watch for the 'Enter download mode' prompt.\n"
         )
         sys.stderr.flush()
 
@@ -1066,7 +1119,9 @@ def main() -> int:
             # what we've ruled out). The wait function handles prompting,
             # per-attempt coaching, and retry. No heartbeat here — the wait
             # function already emits "[still present]" ticks every 3 s.
-            bl_port = _wait_for_download_port(port, per_attempt_timeout=45.0)
+            bl_port = _wait_for_download_port(
+                port, variant=args.variant, per_attempt_timeout=45.0
+            )
             if not bl_port:
                 sys.stderr.write(
                     "\nCould not reach download mode. Re-run when ready.\n"
@@ -1140,15 +1195,24 @@ def main() -> int:
                         # Both the inline and standalone resets failed.
                         # The flash is written; we just need the user to
                         # press RESET on the device to boot into UIFlow.
-                        sys.stderr.write(
-                            "\n---- Manual reset needed ----\n"
-                            "  The flash is written correctly but the "
-                            "automatic reset failed.\n"
-                            "  Please press BtnRST (back of device, small button "
-                            "near BtnG0) ONCE.\n"
-                            "  Do NOT hold BtnG0 — we want to boot into UIFlow, "
-                            "not back into download mode.\n"
-                        )
+                        if args.variant == "cardputer-adv":
+                            sys.stderr.write(
+                                "\n---- Manual reset needed ----\n"
+                                "  The flash is written correctly but the "
+                                "automatic reset failed.\n"
+                                "  Slide the side power switch OFF then ON ONCE "
+                                "to boot into UIFlow.\n"
+                                "  Do NOT hold BtnG0 — we want UIFlow, not "
+                                "download mode.\n"
+                            )
+                        else:
+                            sys.stderr.write(
+                                "\n---- Manual reset needed ----\n"
+                                "  The flash is written correctly but the "
+                                "automatic reset failed.\n"
+                                "  Please press BtnRST ONCE (do NOT hold BtnG0) "
+                                "to boot into UIFlow.\n"
+                            )
                         # Wait up to 45 s for the PID to flip back to 0x816b.
                         deadline = time.monotonic() + 45
                         while time.monotonic() < deadline:

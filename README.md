@@ -39,6 +39,115 @@ that turn the Cardputer into a hand-held Claude device:
 
 [Managed Agents]: https://platform.claude.com/docs/en/managed-agents/overview
 
+## Use cases
+
+The Cardputer is a credit-card-sized ESP32 with a QWERTY keyboard,
+240×135 LCD, speaker, and microphone. Paired with Claude, it becomes
+something no phone or laptop can be: a dedicated physical interface
+between you and your AI agents. Here are the ways people are using it.
+
+### 🛡️ Physical 2FA for AI agents
+
+The `confirm` tool demands a sustained 3-second keypress on the
+Cardputer before a destructive operation proceeds. No prompt injection,
+hallucination, or runaway agent loop can synthesize a physical gesture
+on a device in your pocket. Use it as a hardware gate before:
+
+- Production deploys and force pushes
+- Database mutations (`DROP TABLE`, `DELETE` without `WHERE`)
+- Financial transactions or paid API calls
+- File deletions that can't be undone
+
+This is the "2FA for AI" moment — the agent asks permission through a
+channel it cannot compromise.
+
+### 📟 Pocket agent monitor
+
+Fire off a [Managed Agents] coding task from the QWERTY and watch the
+agent work in real time from your pocket. The Pager app shows a live
+ticker of what the agent is doing — `bash: pytest`, `wrote auth.py`,
+`idle ✓` — and buzzes you when it finishes or needs approval. Walk
+away from your laptop, grab coffee, and still know the moment your
+CI is green or a deploy needs a Y/N.
+
+### 🎤 Hands-free voice assistant
+
+Tap SPACE, ask a question out loud, and Claude Haiku 4.5 answers on the
+LCD. Whisper handles transcription; a 24-hour per-device memory keeps
+context across turns. Switch to type-mode with `T` for noisy
+environments. Useful for:
+
+- Quick lookups while your hands are busy (cooking, soldering, walking)
+- Rapid-fire Q&A sessions without context-switching to a browser
+- Learning and tutoring — ask follow-up questions naturally
+
+### 🔔 MCP notification pager
+
+Register the Cardputer as an MCP server with Claude Code, Cursor, or
+any MCP-speaking client. The agent can:
+
+- **Buzz you** with a colored banner and speaker chirp when a long task
+  finishes — no need to keep a terminal tab in focus
+- **Ask a quick question** with numbered choices (press 1–4 on the
+  QWERTY) — the agent blocks until you answer, then continues
+- **Demand confirmation** before anything irreversible — see "Physical
+  2FA" above
+
+All over local BLE. No cloud, no Wi-Fi, sub-second round trips. The
+device works offline and in airplane mode.
+
+### 🖥️ Browser-based agent console
+
+The Central Console is a self-contained dark-theme HTML UI served
+directly from the Cloudflare Worker. No build step, no dependencies.
+Use it on your Mac to:
+
+- Watch live event streams from running agents with syntax-highlighted
+  bash and inline diffs
+- Approve or deny pending tool calls from the browser
+- Browse and download artifacts the agent saved
+- Fire new tasks — they appear on the Cardputer's Pager too
+
+### 🔧 Portable task launcher for coding agents
+
+Type a task on the Cardputer's QWERTY keyboard (`refactor auth module`,
+`write tests for the API`, `research X and write a summary`) and press
+Enter. A cloud agent spins up, does the work, and the device notifies
+you when it's done. Reply from the device if the agent needs guidance,
+or interrupt it if it goes off-track. All without opening a laptop.
+
+### 📊 BLE dev environment sidecar
+
+Claude Buddy pairs with Claude Desktop's Hardware Buddy mode over BLE.
+Glance at the Cardputer to see:
+
+- Current agent activity and approval prompts
+- Token spend and queue depth
+- Connection status
+
+Approve or deny tool calls with Y/N on the keyboard — useful when
+Claude is running long autonomous sessions and you want a physical
+killswitch nearby.
+
+### 🧪 Hardware prototyping platform
+
+The bundle is designed to be extended. Drop a `.py` file into
+`buddy/device/apps/`, push it to the device, and it shows up in the
+launcher automatically. The Cardputer gives you:
+
+- Full QWERTY keyboard input
+- 240×135 color LCD
+- BLE and WiFi radios
+- Speaker and PDM microphone (Cardputer-Adv)
+- MicroPython with M5Stack's hardware libraries
+
+Use it as a starting point for your own MCP tools, custom agent
+interfaces, or IoT experiments. Crib from
+[`hello_cardputer.py`](buddy/device/apps/hello_cardputer.py) for the
+minimal conventions.
+
+---
+
 > **Forked from** [`moremas/build-with-claude`](https://github.com/moremas/build-with-claude).
 > This fork adds the `worker/` directory (a Cloudflare Worker that
 > handles voice STT + Claude chat with conversation memory) and the

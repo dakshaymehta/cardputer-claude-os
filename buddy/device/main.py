@@ -227,6 +227,64 @@ def _wifi_pip_label():
     return ("ONLINE", _GREEN)
 
 
+# Single-shot guard for battery-read error logging: the read runs in
+# the 30 s refresh loop, so a persistently broken driver would spam
+# the console without it. Cleared on the next successful read.
+_bat_err_logged = False
+
+
+def _battery_label():
+    """Header-strip text + color for the battery, or ``(None, None)``
+    when the Power driver can't be read — callers skip drawing rather
+    than show a guess. Defensive for the same reason as the speaker
+    code in the apps: a flaky driver must never take down the
+    launcher.
+    """
+    global _bat_err_logged
+    try:
+        lvl = M5.Power.getBatteryLevel()
+    except Exception as e:
+        if not _bat_err_logged:
+            print("launcher: battery read failed:", e)
+            _bat_err_logged = True
+        return (None, None)
+    _bat_err_logged = False
+    if not isinstance(lvl, (int, float)) or not 0 <= lvl <= 100:
+        return (None, None)
+    lvl = int(lvl)
+    if lvl <= 20:
+        color = _RED
+    elif lvl <= 50:
+        color = _ORANGE
+    else:
+        color = _GREEN
+    return ("{}%".format(lvl), color)
+
+
+def _draw_header_pips():
+    """(Re)paint the right side of the header: battery pip, then the
+    WiFi pip at the far edge. Factored out of _draw_chrome so the main
+    loop can refresh the battery on a slow cadence without repainting
+    the whole menu. Clears its own background first so a shrinking
+    string ("100%" -> "75%") doesn't leave stale pixels.
+    """
+    # Clear from x=132: past the title (ends at x=128, measured
+    # on-device) and short of the widest pip layout ("100%" at 30 px
+    # + 8 px gap + "OFFLINE" at 55 px + 6 px margin starts at x=141).
+    _LCD.fillRect(132, 0, _W - 132, 20, _DARK)
+    _LCD.setTextSize(1)
+
+    pip_text, pip_color = _wifi_pip_label()
+    x = _W - _LCD.textWidth(pip_text) - 6
+    _LCD.setTextColor(pip_color, _DARK)
+    _LCD.drawString(pip_text, x, 5)
+
+    bat_text, bat_color = _battery_label()
+    if bat_text is not None:
+        _LCD.setTextColor(bat_color, _DARK)
+        _LCD.drawString(bat_text, x - _LCD.textWidth(bat_text) - 8, 5)
+
+
 def _discover_apps():
     """Return a sorted list of ``(display_name, module_basename)``.
 
@@ -315,18 +373,22 @@ def _draw_chrome(apps, cursor, scroll_top=0):
     the panel push takes a few ms."""
     _LCD.fillScreen(_BLACK)
 
-    # Header.
+    # Header. The title is "Menu" rather than "Launcher" so it fits at
+    # full text size alongside the status pips: measured on-device,
+    # "Claude Buddy Menu" is 122 px (ends at x=128) while the widest
+    # pip layout ("100%" + "OFFLINE") starts at x=141. "Claude Buddy
+    # Launcher" is 145 px and physically collides — don't bring it back
+    # without re-doing this math.
     _LCD.fillRect(0, 0, _W, 20, _DARK)
     _LCD.fillRect(0, 20, _W, 1, _ORANGE)
     _LCD.setTextSize(1)
     _LCD.setTextColor(_ORANGE, _DARK)
-    _LCD.drawString("Claude Buddy Launcher", 6, 5)
+    _LCD.drawString("Claude Buddy Menu", 6, 5)
 
-    # WiFi status pip on the header's right side. Reads the cached
-    # _wifi_status set by _connect_wifi_with_splash on boot.
-    pip_text, pip_color = _wifi_pip_label()
-    _LCD.setTextColor(pip_color, _DARK)
-    _LCD.drawString(pip_text, _W - _LCD.textWidth(pip_text) - 6, 5)
+    # Status pips on the header's right side: battery %, then the WiFi
+    # state (cached from _connect_wifi_with_splash) at the far edge.
+    # Also restores text size to 1 for the menu rows below.
+    _draw_header_pips()
 
     # Menu rows constrained to the left region so the burst animation
     # has clean space on the right. Only _MAX_VISIBLE rows are shown at
@@ -516,6 +578,11 @@ def main():
     frame_ms = _burst.FRAME_MS if _burst is not None else 80
     last_frame_ms = time.ticks_ms()
 
+    # Battery pip refresh cadence. 30 s tracks charging/draining
+    # closely enough for a menu screen without measurable cost.
+    bat_refresh_ms = 30000
+    last_bat_ms = last_frame_ms
+
     while True:
         kb.tick()
         intent = _intent(kb.get_key())
@@ -556,6 +623,12 @@ def main():
             frame += 1
             _draw_burst_frame(frame)
             last_frame_ms = now
+
+        # Refresh the battery pip on a slow cadence so the header
+        # tracks charge state while the menu idles.
+        if time.ticks_diff(now, last_bat_ms) >= bat_refresh_ms:
+            _draw_header_pips()
+            last_bat_ms = now
 
         time.sleep_ms(40)
 

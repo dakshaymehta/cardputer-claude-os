@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/dakshaymehta-cardputer-claude-os-badge.png)](https://mseep.ai/app/dakshaymehta-cardputer-claude-os)
+
 # Cardputer Claude OS
 
 A DIY "OS" bundle for the [M5Stack Cardputer](https://shop.m5stack.com/) —

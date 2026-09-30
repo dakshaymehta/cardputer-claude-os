@@ -103,7 +103,24 @@ async function callHaiku(env, deviceSecret, userMessage) {
     return { ok: false, status: claudeResp.status, detail };
   }
   const data = await claudeResp.json();
-  const text = (data.content?.[0]?.text || "").trim() || "(empty)";
+  // Replies can lead with a thinking block (extended thinking, or a
+  // proxy fronting a reasoning model), so collect every text block
+  // instead of trusting content[0].
+  const blocks = Array.isArray(data.content) ? data.content : [];
+  const text = blocks
+    .filter((b) => b?.type === "text" && b.text)
+    .map((b) => b.text)
+    .join("\n")
+    .trim();
+  if (!text) {
+    console.log("chat: no text in reply", JSON.stringify({
+      model: data.model,
+      stop_reason: data.stop_reason,
+      types: blocks.map((b) => b?.type),
+      usage: data.usage,
+    }));
+    return { ok: true, text: "(empty)" };
+  }
   await appendTurn(env, deviceSecret, userMessage, text);
   return { ok: true, text };
 }

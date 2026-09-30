@@ -1,9 +1,10 @@
 """Optional WiFi auto-connect on boot.
 
-Set ``SSID`` / ``PASSWORD`` below to your own network if you want
+Put your network in ``wifi_config.py`` (copy ``wifi_config.example.py``;
+it's gitignored so the password never enters the repo) if you want
 the launcher to come up online (the Push-to-Claude voice/chat app
-needs WiFi). Leave them empty to skip the auto-connect — the
-launcher will display ``WiFi: offline`` and continue normally.
+needs WiFi). Without it — or with empty values — the auto-connect is
+skipped: the launcher displays ``WiFi: offline`` and continues normally.
 
 To disable the auto-connect entirely, remove the
 ``wifi_event.connect_with_splash(...)`` call from ``main.py``.
@@ -17,9 +18,14 @@ is deterministic regardless of that.
 """
 
 # --- WIFI CREDENTIALS ---------------------------------------------------
-# Fill in your own. Leave empty to skip the auto-connect.
-SSID = ""
-PASSWORD = ""
+# Loaded from the gitignored ``wifi_config.py``. Empty skips the connect.
+try:
+    import wifi_config as _cfg  # type: ignore
+except Exception:
+    _cfg = None
+
+SSID = getattr(_cfg, "SSID", "") if _cfg else ""
+PASSWORD = getattr(_cfg, "PASSWORD", "") if _cfg else ""
 # -----------------------------------------------------------------------
 
 # How long to wait for an IP before giving up. The venue network is

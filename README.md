@@ -506,10 +506,12 @@ in `wrangler.toml`, default 30). Bump or lower it to taste.
 The launcher tries to bring up WiFi on every boot and shows the result
 on screen — `Connected · IP: 192.168.x.x` on success, `WiFi: offline`
 on failure (the launcher always continues either way). Out of the box
-the credentials in [`buddy/device/wifi_event.py`](buddy/device/wifi_event.py)
-are blank, so you'll see `WiFi: offline`. Edit that file to fill in
-your own SSID + password, or remove the `_connect_wifi_with_splash()`
-call near the top of `main()` to skip the auto-connect entirely.
+there are no credentials, so you'll see `WiFi: offline`. Copy
+[`buddy/device/wifi_config.example.py`](buddy/device/wifi_config.example.py)
+to `buddy/device/wifi_config.py` (gitignored) and fill in your own
+SSID + password (2.4 GHz only), then re-run `install_apps.py`. To skip
+the auto-connect entirely, remove the `_connect_wifi_with_splash()`
+call near the top of `main()`.
 
 ## Adding your own app
 

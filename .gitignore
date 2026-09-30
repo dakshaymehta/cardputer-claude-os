@@ -9,5 +9,6 @@ venv/
 
 # Local secrets / per-device configuration
 buddy/device/apps/config.py
+buddy/device/wifi_config.py
 worker/.dev.vars
 worker/.wrangler/

@@ -45,9 +45,26 @@ fallthrough = true
 # Per-device daily cap on new agent sessions, a cheap fork-bomb guard.
 [vars]
 PAGER_DAILY_SPAWN_CAP = "30"
+# Optional: route Push-to-Claude chat through an Anthropic-Messages-
+# compatible gateway (OmniRoute, LiteLLM, ...). Must be a public HTTPS
+# URL — the Worker can't reach your localhost. No trailing /v1.
+# CHAT_BASE_URL = "https://gateway.example.com"
+# CHAT_MODEL = "my-combo"            # a combo name or e.g. "cc/claude-haiku-4-5"
+# Optional: speech-to-text via an OpenAI-compatible
+# /v1/audio/transcriptions (default: OpenAI whisper-1 + OPENAI_API_KEY).
+# With STT_BASE_URL set, the key is STT_API_KEY or else CHAT_API_KEY.
+# STT_BASE_URL = "https://gateway.example.com"
+# STT_MODEL = "groq/whisper-large-v3-turbo"
+#
+# Personal values (KV ids, gateway URLs) can live in a gitignored copy of
+# this file instead: `npx wrangler deploy -c wrangler.local.toml`.
 
 # ---- Secrets (set via `wrangler secret put`, not committed) -----------
 # DEVICE_SECRET        — auth for Pager + Console + Push-to-Claude
-# ANTHROPIC_API_KEY    — used for both Haiku chat and Managed Agents
-# OPENAI_API_KEY       — Whisper for Push-to-Claude (optional if you
-#                        don't use the voice app)
+# ANTHROPIC_API_KEY    — Managed Agents (Pager/Console); also chat
+#                        unless CHAT_API_KEY is set
+# CHAT_API_KEY         — optional key for CHAT_BASE_URL (sent as both
+#                        x-api-key and Authorization: Bearer)
+# STT_API_KEY          — optional key for STT_BASE_URL
+# OPENAI_API_KEY       — Whisper for Push-to-Claude when STT_BASE_URL is
+#                        unset (optional if you don't use the voice app)

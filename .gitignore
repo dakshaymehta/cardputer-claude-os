@@ -11,3 +11,5 @@ venv/
 buddy/device/apps/config.py
 worker/.dev.vars
 worker/.wrangler/
+worker/node_modules/
+worker/wrangler.local.toml

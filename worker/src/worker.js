@@ -44,8 +44,43 @@ const CHAT_SYSTEM_PROMPT =
   "You may receive a few prior turns of conversation history; " +
   "treat the latest user message as the current question.";
 
-const CHAT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_CHAT_MODEL = "claude-haiku-4-5-20251001";
+const DEFAULT_CHAT_BASE_URL = "https://api.anthropic.com";
 const HISTORY_MAX_MESSAGES = 8;
+
+// Chat can go through any Anthropic-Messages-compatible gateway
+// (OmniRoute, LiteLLM, ...) via CHAT_BASE_URL / CHAT_MODEL vars and a
+// CHAT_API_KEY secret, independently of the Pager, which needs the
+// first-party Managed Agents API and keeps using ANTHROPIC_API_KEY.
+function chatConfig(env) {
+  const base = (env.CHAT_BASE_URL || DEFAULT_CHAT_BASE_URL).replace(/\/+$/, "");
+  const key = env.CHAT_API_KEY || env.ANTHROPIC_API_KEY;
+  const headers = {
+    "content-type": "application/json",
+    "x-api-key": key,
+    "anthropic-version": "2023-06-01",
+  };
+  // Gateways commonly authenticate with Bearer (OmniRoute ignores
+  // x-api-key as of 3.8). Never send it to api.anthropic.com, where a
+  // Bearer token means OAuth and would conflict with the API key.
+  if (base !== DEFAULT_CHAT_BASE_URL) headers.authorization = `Bearer ${key}`;
+  return { url: `${base}/v1/messages`, model: env.CHAT_MODEL || DEFAULT_CHAT_MODEL, headers };
+}
+
+// Speech-to-text defaults to OpenAI Whisper; STT_BASE_URL / STT_MODEL
+// point it at any OpenAI-compatible /v1/audio/transcriptions instead
+// (e.g. OmniRoute → Groq). A custom base reuses CHAT_API_KEY unless
+// STT_API_KEY is set, since it's usually the same gateway.
+function sttConfig(env) {
+  const custom = Boolean(env.STT_BASE_URL);
+  const base = (env.STT_BASE_URL || "https://api.openai.com").replace(/\/+$/, "");
+  const key = env.STT_API_KEY || (custom ? env.CHAT_API_KEY : env.OPENAI_API_KEY);
+  return {
+    url: `${base}/v1/audio/transcriptions`,
+    model: env.STT_MODEL || "whisper-1",
+    headers: { Authorization: `Bearer ${key}` },
+  };
+}
 const HISTORY_TTL_SECONDS = 24 * 3600;
 
 function authOk(request, env) {
@@ -83,15 +118,12 @@ async function callHaiku(env, deviceSecret, userMessage) {
   const history = await getHistory(env, deviceSecret);
   const messages = [...history, { role: "user", content: userMessage }];
 
-  const claudeResp = await fetch("https://api.anthropic.com/v1/messages", {
+  const chat = chatConfig(env);
+  const claudeResp = await fetch(chat.url, {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
+    headers: chat.headers,
     body: JSON.stringify({
-      model: CHAT_MODEL,
+      model: chat.model,
       max_tokens: 250,
       system: CHAT_SYSTEM_PROMPT,
       messages,
@@ -125,17 +157,15 @@ async function handleAsk(request, env) {
     new Blob([audioBytes], { type: "audio/wav" }),
     "audio.wav",
   );
-  form.append("model", "whisper-1");
+  const stt = sttConfig(env);
+  form.append("model", stt.model);
   form.append("response_format", "text");
 
-  const whisperResp = await fetch(
-    "https://api.openai.com/v1/audio/transcriptions",
-    {
-      method: "POST",
-      headers: { Authorization: `Bearer ${env.OPENAI_API_KEY}` },
-      body: form,
-    },
-  );
+  const whisperResp = await fetch(stt.url, {
+    method: "POST",
+    headers: stt.headers,
+    body: form,
+  });
   if (!whisperResp.ok) {
     const detail = (await whisperResp.text()).slice(0, 300);
     return jsonResp(

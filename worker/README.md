@@ -98,6 +98,32 @@ npx wrangler secret put OPENAI_API_KEY      # Whisper for voice (skip if you don
 npx wrangler secret put DEVICE_SECRET       # any random 32+ char string
 ```
 
+**Using a gateway for chat (optional).** Push to Claude only needs
+`POST /v1/messages`, so it can go through any Anthropic-compatible
+gateway (OmniRoute, LiteLLM, …). Set `CHAT_BASE_URL` (and usually
+`CHAT_MODEL`, e.g. an OmniRoute combo name) under `[vars]` in
+`wrangler.toml`, and put the gateway key in a separate secret:
+
+```bash
+npx wrangler secret put CHAT_API_KEY
+```
+
+The key is sent as both `x-api-key` and `Authorization: Bearer`. The
+gateway must be reachable at a public HTTPS URL, since the Worker runs
+on Cloudflare's edge, not your machine. The Pager and Console still need
+`ANTHROPIC_API_KEY` against `api.anthropic.com`, because gateways don't
+proxy the Managed Agents API.
+
+Voice transcription works the same way. Set `STT_BASE_URL` and
+`STT_MODEL` (e.g. `groq/whisper-large-v3-turbo` through OmniRoute) to
+use any OpenAI-compatible `/v1/audio/transcriptions` instead of OpenAI
+Whisper. It reuses `CHAT_API_KEY` unless you set `STT_API_KEY`, and
+`OPENAI_API_KEY` is then not needed.
+
+To keep your KV ids and gateway URLs out of git, put them in a copy
+named `worker/wrangler.local.toml` (gitignored) and deploy with
+`npx wrangler deploy -c wrangler.local.toml`.
+
 Generate a `DEVICE_SECRET` with:
 
 ```bash

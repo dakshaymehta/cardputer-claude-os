@@ -158,6 +158,11 @@ VARIANTS = {
         "category": "cardputer",
         "entry_name": "UIFlow2.0",
         "version_suffix": "",
+        # v2.4.3+ is built on ESP-IDF 5.5.x, whose I2S driver regression
+        # leaves the PDM mic returning a constant -8 (espressif/esp-idf
+        # #18621, m5stack/M5Cardputer#11). v2.4.2 is the newest build on
+        # IDF 5.4.2. Drop the pin once an upstream fix ships.
+        "pinned_version": "v2.4.2",
     },
     "cardputer-adv": {
         "category": "cardputer",
@@ -188,25 +193,54 @@ def _find_entry(manifest: list, spec: dict) -> dict:
     )
 
 
+def _fits_variant(ver: str, spec: dict) -> bool:
+    """True if a version tag belongs to this hardware variant.
+
+    Some manifest entries are shared between boards (Core2 and Tough,
+    Basic 4MB and 16MB) and only the tag suffix tells them apart.
+    """
+    suffix = spec.get("version_suffix", "")
+    if suffix:
+        return ver.endswith(suffix)
+    return not any(ver.endswith(bad) for bad in spec.get("version_must_not", ()))
+
+
 def _pick_version(entry: dict, spec: dict) -> dict:
     """Pick the newest stable version matching the variant's suffix.
 
     Stable = version tag without rc/alpha/beta/hotfix. Falls back to
     the newest non-stable if nothing clean matches, so preview/RC
     releases are still flashable when that's all that exists.
+
+    A variant's ``pinned_version`` wins over "newest". The
+    ``M5_UIFLOW_VERSION`` env var overrides both: an exact tag (e.g.
+    ``v2.5.3``) or ``latest`` to ignore the pin. An exact tag must still
+    belong to the variant (a ``-TOUGH`` tag is refused for ``core2``).
     """
+    wanted = os.environ.get("M5_UIFLOW_VERSION") or spec.get("pinned_version")
+    if wanted and wanted != "latest":
+        for v in entry.get("versions", []):
+            if v.get("version") != wanted:
+                continue
+            if not _fits_variant(wanted, spec):
+                raise SystemExit(
+                    f"Version {wanted!r} in {entry.get('name')!r} is for a different "
+                    f"board than this variant (suffix={spec.get('version_suffix', '')!r}, "
+                    f"excluded={list(spec.get('version_must_not', ()))}). "
+                    "Pick the matching --variant instead."
+                )
+            return v
+        raise SystemExit(
+            f"Version {wanted!r} not found for {entry.get('name')!r}. "
+            f"Available: {[v.get('version') for v in entry.get('versions', []) if _fits_variant(v.get('version') or '', spec)]}"
+        )
+
     suffix = spec.get("version_suffix", "")
-    must_not = spec.get("version_must_not", ())
-    candidates = []
-    for v in entry.get("versions", []):
-        if v.get("published") is False:
-            continue
-        ver = v.get("version") or ""
-        if suffix and not ver.endswith(suffix):
-            continue
-        if not suffix and any(ver.endswith(bad) for bad in must_not):
-            continue
-        candidates.append(v)
+    candidates = [
+        v for v in entry.get("versions", [])
+        if v.get("published") is not False
+        and _fits_variant(v.get("version") or "", spec)
+    ]
     if not candidates:
         raise SystemExit(
             f"No versions for {entry.get('name')!r} match suffix={suffix!r}. "

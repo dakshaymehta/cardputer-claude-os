@@ -4,7 +4,7 @@
 # API has shifted across versions so re-test the stdio entry point
 # after a bump.
 
-mcp>=1.0.0
+mcp>=1.0.0,<2  # 2.x renamed FastMCP → MCPServer; server.py targets the 1.x API
 # bleak is not yet imported in iter 1 (transport is stubbed) but
 # pre-declared so `pip install -r` produces a complete environment
 # ready for iter 2.
